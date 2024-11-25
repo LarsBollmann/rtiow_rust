@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use crate::hittable::{HitRecord, Hittable};
 
 use crate::interval::Interval;
+use crate::material::Material;
 use crate::ray::Ray;
 use crate::vec::Vec3;
 
@@ -9,11 +12,12 @@ use crate::vec::Vec3;
 pub struct Sphere {
     center: Vec3,
     radius: f64,
+    material: Arc<dyn Material>,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f64) -> Self {
-        Self { center, radius }
+    pub fn new(center: Vec3, radius: f64, material: Arc<dyn Material>) -> Self {
+        Self { center, radius, material }
     }
 }
 
@@ -30,11 +34,11 @@ impl Hittable for Sphere {
             return None;
         } 
 
-        let sqrtd = discriminant.sqrt();
-        let root = (h - sqrtd) / a;
+        let sqrtd: f64 = discriminant.sqrt();
+        let mut root = (h - sqrtd) / a;
 
         if !range.surrounds(root) {
-            let root = (h + sqrtd) / a;
+            root = (h + sqrtd) / a;
             if !range.surrounds(root) {
                 return None;
             }
@@ -43,6 +47,6 @@ impl Hittable for Sphere {
         let p = ray.at(root);
         let normal = (p - self.center) / self.radius;
 
-        Some(HitRecord::new(p, normal, root, ray))
+        Some(HitRecord::new(p, normal, root, ray, self.material.clone()))
     }
 }

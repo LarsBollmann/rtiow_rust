@@ -4,7 +4,9 @@ use std::{
     io::Write,
 };
 
-use indicatif::ProgressIterator;
+use indicatif::ParallelProgressIterator;
+use rand::Rng;
+use rayon::prelude::*;
 
 use crate::{
     hittable::HittableList,
@@ -19,6 +21,8 @@ pub struct CameraArgs {
     pub image_width: u32,
     pub origin: Vec3,
     pub focal_length: f64,
+    pub samples_per_pixel: u32,
+    pub max_depth: u32,
 }
 
 impl default::Default for CameraArgs {
@@ -28,6 +32,8 @@ impl default::Default for CameraArgs {
             image_width: 400,
             origin: Vec3::default(),
             focal_length: 1.0,
+            samples_per_pixel: 10,
+            max_depth: 10,
         }
     }
 }
@@ -39,6 +45,8 @@ pub struct Camera {
     pixel_00_location: Vec3,
     pixel_delta_u: Vec3,
     pixel_delta_v: Vec3,
+    samples_per_pixel: u32,
+    max_depth: u32,
 }
 
 impl Camera {
@@ -65,20 +73,47 @@ impl Camera {
             image_width: args.image_width,
             image_height: image_height as u32,
             origin: camera_origin,
+            samples_per_pixel: args.samples_per_pixel,
+            max_depth: args.max_depth,
             pixel_00_location,
             pixel_delta_u,
             pixel_delta_v,
         }
     }
 
-    pub fn ray_color(&self, ray: &Ray, world: &HittableList) -> Color {
-        if let Some(hit_record) = world.hit(ray, Interval::new(0.0, f64::INFINITY)) {
-            return 0.5 * (hit_record.normal + Color::new(1.0, 1.0, 1.0));
+    pub fn ray_color(&self, depth: u32, ray: &Ray, world: &HittableList) -> Color {
+        if depth == 0 {
+            return Color::default();
+        }
+        if let Some(hit_record) = world.hit(ray, Interval::new(0.001, f64::INFINITY)) {
+            if let Some((attenuation, scattered_ray)) =
+                hit_record.material.scatter(ray, &hit_record)
+            {
+                return attenuation * self.ray_color(depth - 1, &scattered_ray, world);
+            } else {
+                return Color::default();
+            }
         }
 
         let unit_dir = ray.dir.unit_vector();
         let t = 0.5 * (unit_dir.y + 1.0);
         (1.0 - t) * Color::new(1.0, 1.0, 1.0) + t * Color::new(0.5, 0.7, 1.0)
+    }
+
+    pub fn get_ray(&self, row: u32, column: u32) -> Ray {
+        let mut rng = rand::thread_rng();
+        let (rand_u, rand_v) = (rng.gen_range(-0.5..=0.5), rng.gen_range(-0.5..=0.5));
+        let pixel_sample = self.pixel_00_location
+            + self.pixel_delta_v * (row as f64 + rand_v)
+            + self.pixel_delta_u * (column as f64 + rand_u);
+
+        let origin = self.origin;
+        let direction = pixel_sample - origin;
+
+        Ray {
+            orig: origin,
+            dir: direction,
+        }
     }
 
     pub fn render(&self, world: &HittableList) {
@@ -92,16 +127,39 @@ impl Camera {
         )
         .unwrap();
 
-        for row in (0..self.image_height).progress() {
-            for column in 0..self.image_width {
-                let pixel_center =
-                    self.pixel_00_location + self.pixel_delta_u * column + self.pixel_delta_v * row;
-                let ray_direction = pixel_center - self.origin;
-                let ray = Ray::new(self.origin, ray_direction);
+        // for row in (0..self.image_height).progress() {
+        //     for column in 0..self.image_width {
+        //         let mut color = Color::default();
 
-                let color = self.ray_color(&ray, world);
-                writeln!(&mut file, "{}", color.to_bytes_string()).unwrap();
-            }
+        //         for _ in 0..self.samples_per_pixel {
+        //             let ray = self.get_ray(row, column);
+        //             color += self.ray_color(self.max_depth, &ray, world);
+        //         }
+        //         color = color / self.samples_per_pixel as f64;
+        //         writeln!(&mut file, "{}", color.to_bytes_string()).unwrap();
+        //     }
+        // }
+
+        // Parallel implementation using rayon
+
+        let colors: Vec<Color> = (0..self.image_height)
+            .into_par_iter()
+            .progress()
+            .flat_map(|row| {
+                (0..self.image_width).into_par_iter().map(move |column| {
+                    let mut color = Color::default();
+                    for _ in 0..self.samples_per_pixel {
+                        let ray = self.get_ray(row, column);
+                        color += self.ray_color(self.max_depth, &ray, world);
+                    }
+                    color = color / self.samples_per_pixel as f64;
+                    color
+                })
+            })
+            .collect();
+
+        for color in colors {
+            writeln!(&mut file, "{}", color.to_bytes_string()).unwrap();
         }
     }
 }

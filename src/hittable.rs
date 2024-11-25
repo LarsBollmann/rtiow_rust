@@ -1,17 +1,20 @@
-use crate::{interval::Interval, ray::Ray, vec::Vec3};
+use std::sync::Arc;
 
-#[derive(Debug, Clone, Copy, Default)]
+use crate::{interval::Interval, material::Material, ray::Ray, vec::Vec3};
+
+#[derive(Clone)]
 pub struct HitRecord {
     pub p: Vec3,
     pub normal: Vec3,
     pub t: f64,
     pub is_front_face: bool,
+    pub material: Arc<dyn Material>,
 }
 
 impl HitRecord {
-    pub fn new(p: Vec3, outward_normal: Vec3, t: f64, ray: &Ray) -> Self {
+    pub fn new(p: Vec3, outward_normal: Vec3, t: f64, ray: &Ray, material: Arc<dyn Material>) -> Self {
         let (is_front_face, normal) = Self::get_face_normal(ray, outward_normal);
-        Self { p, normal, t, is_front_face }
+        Self { p, normal, t, is_front_face , material }
     }
 
     fn get_face_normal(ray: &Ray, outward_normal: Vec3) -> (bool, Vec3) {
@@ -22,7 +25,7 @@ impl HitRecord {
 }
 
 pub struct HittableList {
-    objects: Vec<Box<dyn Hittable>>,
+    objects: Vec<Box<dyn Hittable + Sync+ Send>>,
 }
 
 impl Default for HittableList {
@@ -36,7 +39,7 @@ impl HittableList {
         Self { objects: Vec::new() }
     }
 
-    pub fn add(&mut self, object: Box<dyn Hittable>) {
+    pub fn add(&mut self, object: Box<dyn Hittable + Sync+ Send>) {
         self.objects.push(object);
     }
 

@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Interval<T=f64> {
+pub struct Interval<T=f64>
+ {
     pub min: T,
     pub max: T,
 }
@@ -28,5 +29,18 @@ impl<T> Interval<T> {
         T: PartialOrd,
     {
         self.min < other.min && other.max < self.max
+    }
+
+    pub fn clamp(&self, value: T) -> T
+    where
+        T: PartialOrd + Copy,
+    {
+        if value < self.min {
+            self.min
+        } else if value > self.max {
+            self.max
+        } else {
+            value
+        }
     }
 }

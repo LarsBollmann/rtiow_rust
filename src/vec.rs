@@ -1,3 +1,10 @@
+
+use std::ops::Range;
+
+use rand::Rng;
+
+use crate::interval::Interval;
+
 pub type Color = Vec3;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -9,7 +16,7 @@ pub struct Vec3 {
 
 impl Vec3 {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
-        Vec3 { x, y, z }
+        Self { x, y, z }
     }
 
     pub fn unit_vector(self) -> Self {
@@ -29,28 +36,99 @@ impl Vec3 {
     }
 
     pub fn cross(self, rhs: Self) -> Self {
-        Vec3 {
+        Self {
             x: self.y * rhs.z - self.z * rhs.y,
             y: self.z * rhs.x - self.x * rhs.z,
             z: self.x * rhs.y - self.y * rhs.x,
         }
     }
 
+    pub fn random() -> Self {
+        let mut rng = rand::thread_rng();
+
+        Self {
+            x: rng.gen_range(0.0..1.0),
+            y: rng.gen_range(0.0..1.0),
+            z: rng.gen_range(0.0..1.0),
+        }
+    }
+
+    pub fn random_range(range: Range<f64>) -> Self {
+        let mut rng = rand::thread_rng();
+
+        Self {
+            x: rng.gen_range(range.clone()),
+            y: rng.gen_range(range.clone()),
+            z: rng.gen_range(range.clone()),
+        }
+    }
+
+    pub fn random_unit_vector() -> Self {
+        loop {
+            let vec = Self::random_range(-1.0..1.0);
+            let length = vec.length_squared();
+            if length < 1.0 && length > 1e-160 {
+                return vec / length.sqrt();
+            }
+        }
+    }
+
+    pub fn random_on_hemisphere(normal: Vec3) -> Vec3 {
+        let vec = Self::random_unit_vector();
+        match vec.dot(normal) > 0.0 {
+            true => vec,
+            false => -vec
+        }
+    }
+
+    pub fn near_zero(self) -> bool {
+        const S: f64 = 1e-8;
+        self.x.abs() < S && self.y.abs() < S && self.z.abs() < S
+    }
+
+    pub fn reflect(self, normal: Vec3) -> Vec3 {
+        self - 2.0 * self.dot(normal) * normal
+    }
+
+    // inline vec3 refract(const vec3& uv, const vec3& n, double etai_over_etat) {
+    //     auto cos_theta = std::fmin(dot(-uv, n), 1.0);
+    //     vec3 r_out_perp =  etai_over_etat * (uv + cos_theta*n);
+    //     vec3 r_out_parallel = -std::sqrt(std::fabs(1.0 - r_out_perp.length_squared())) * n;
+    //     return r_out_perp + r_out_parallel;
+    // }
+    
+    pub fn refract(self, normal: Vec3, etai_over_etat: f64) -> Vec3 {
+        let cos_theta = (-self).dot(normal).min(1.0);
+        let r_out_perp = etai_over_etat * (self + cos_theta * normal);
+        let r_out_parallel = (-(1.0 - r_out_perp.length_squared()).abs().sqrt()) * normal;
+        r_out_perp + r_out_parallel
+    }
+
+    pub fn linear_to_gamme(self) -> Self {
+        Self {
+            x: self.x.sqrt(),
+            y: self.y.sqrt(),
+            z: self.z.sqrt(),
+        }
+    }
+
     pub fn to_bytes_string(self) -> String {
+        let interval = Interval::new(0.0, 0.999);
+        let gamma = self.linear_to_gamme();
         format!(
             "{} {} {}",
-            (self.x * 255.999) as i32,
-            (self.y * 255.999) as i32,
-            (self.z * 255.999) as i32
+            (interval.clamp(gamma.x) * 255.999) as i32,
+            (interval.clamp(gamma.y) * 255.999) as i32,
+            (interval.clamp(gamma.z) * 255.999) as i32
         )
     }
 }
 
 impl std::ops::Add for Vec3 {
-    type Output = Vec3;
+    type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Vec3 {
+        Self {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
             z: self.z + rhs.z,
@@ -62,15 +140,21 @@ impl<T> std::ops::Add<T> for Vec3
 where
     T: Into<f64>,
 {
-    type Output = Vec3;
+    type Output = Self;
 
     fn add(self, rhs: T) -> Self::Output {
         let rhs = rhs.into();
-        Vec3 {
+        Self {
             x: self.x + rhs,
             y: self.y + rhs,
             z: self.z + rhs,
         }
+    }
+}
+
+impl std::ops::AddAssign<Vec3> for Vec3 {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
     }
 }
 
@@ -87,10 +171,10 @@ impl std::ops::Add<Vec3> for f64 {
 }
 
 impl std::ops::Sub for Vec3 {
-    type Output = Vec3;
+    type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec3 {
+        Self {
             x: self.x - rhs.x,
             y: self.y - rhs.y,
             z: self.z - rhs.z,
@@ -102,11 +186,11 @@ impl<T> std::ops::Sub<T> for Vec3
 where
     T: Into<f64>,
 {
-    type Output = Vec3;
+    type Output = Self;
 
     fn sub(self, rhs: T) -> Self::Output {
         let rhs = rhs.into();
-        Vec3 {
+        Self {
             x: self.x - rhs,
             y: self.y - rhs,
             z: self.z - rhs,
@@ -115,10 +199,10 @@ where
 }
 
 impl std::ops::Mul for Vec3 {
-    type Output = Vec3;
+    type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        Vec3 {
+        Self {
             x: self.x * rhs.x,
             y: self.y * rhs.y,
             z: self.z * rhs.z,
@@ -130,11 +214,11 @@ impl<T> std::ops::Mul<T> for Vec3
 where
     T: Into<f64>,
 {
-    type Output = Vec3;
+    type Output = Self;
 
     fn mul(self, rhs: T) -> Self::Output {
         let rhs = rhs.into();
-        Vec3 {
+        Self {
             x: self.x * rhs,
             y: self.y * rhs,
             z: self.z * rhs,
