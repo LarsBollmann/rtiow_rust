@@ -9,10 +9,7 @@ use rand::Rng;
 use rayon::prelude::*;
 
 use crate::{
-    hittable::HittableList,
-    interval::Interval,
-    ray::Ray,
-    vec::{Color, Vec3},
+    hittable::HittableList, interval::Interval, ray::Ray, vec::{Color, Vec3}
 };
 
 #[derive(Debug, Clone)]
@@ -23,6 +20,10 @@ pub struct CameraArgs {
     pub focal_length: f64,
     pub samples_per_pixel: u32,
     pub max_depth: u32,
+    pub fov: f64,
+    pub lookfrom: Vec3,
+    pub lookat: Vec3,
+    pub up: Vec3
 }
 
 impl default::Default for CameraArgs {
@@ -34,6 +35,10 @@ impl default::Default for CameraArgs {
             focal_length: 1.0,
             samples_per_pixel: 10,
             max_depth: 10,
+            fov: 120.0,
+            lookfrom: Vec3::default(),
+            lookat: Vec3::new(0.0, 0.0, -1.0),
+            up: Vec3::new(0.0, 1.0, 0.0)
         }
     }
 }
@@ -53,19 +58,26 @@ impl Camera {
     pub fn new(args: CameraArgs) -> Self {
         let image_height = ((args.image_width as f64 / args.aspect_ratio) as i32).max(1);
 
-        let viewport_height = 2.0;
+        let focal_length = (args.lookfrom-args.lookat).length();
+        let theta = args.fov.to_radians();
+        let h = (theta / 2.0).tan();
+        let viewport_height = 2.0 * h * focal_length;
         let viewport_width = viewport_height * (args.image_width as f64 / image_height as f64);
-        let focal_length = 1.0;
-        let camera_origin = Vec3::new(0.0, 0.0, 0.0);
 
-        let viewport_u = Vec3::new(viewport_width, 0.0, 0.0);
-        let viewport_v = Vec3::new(0.0, -viewport_height, 0.0);
+        let camera_origin = args.lookfrom;
+
+        let w = (args.lookfrom - args.lookat).unit_vector();
+        let u = args.up.unit_vector().cross(w);
+        let v = w.cross(u);
+
+        let viewport_u = u * viewport_width;
+        let viewport_v = -v * viewport_height;
 
         let pixel_delta_u = viewport_u / args.image_width as f64;
         let pixel_delta_v = viewport_v / image_height as f64;
 
         let viewport_upper_left =
-            camera_origin - Vec3::new(0.0, 0.0, focal_length) - 0.5 * viewport_u - 0.5 * viewport_v;
+            camera_origin - focal_length * w - 0.5 * viewport_u - 0.5 * viewport_v;
 
         let pixel_00_location = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
@@ -81,7 +93,7 @@ impl Camera {
         }
     }
 
-    pub fn ray_color(&self, depth: u32, ray: &Ray, world: &HittableList) -> Color {
+    pub fn ray_color(depth: u32, ray: &Ray, world: &HittableList) -> Color {
         if depth == 0 {
             return Color::default();
         }
@@ -89,7 +101,7 @@ impl Camera {
             if let Some((attenuation, scattered_ray)) =
                 hit_record.material.scatter(ray, &hit_record)
             {
-                return attenuation * self.ray_color(depth - 1, &scattered_ray, world);
+                return attenuation * Self::ray_color(depth - 1, &scattered_ray, world);
             } else {
                 return Color::default();
             }
@@ -142,21 +154,23 @@ impl Camera {
 
         // Parallel implementation using rayon
 
-        let colors: Vec<Color> = (0..self.image_height)
-            .into_par_iter()
-            .progress()
-            .flat_map(|row| {
-                (0..self.image_width).into_par_iter().map(move |column| {
-                    let mut color = Color::default();
-                    for _ in 0..self.samples_per_pixel {
+        let colors: Vec<Color> =     (0..self.image_height)
+        .into_par_iter()
+        .progress()
+        .flat_map(|row| {
+            (0..self.image_width).into_par_iter().map(move |column| {
+                let color: Color = (0..self.samples_per_pixel)
+                    .into_par_iter()
+                    .map(|_| {
                         let ray = self.get_ray(row, column);
-                        color += self.ray_color(self.max_depth, &ray, world);
-                    }
-                    color = color / self.samples_per_pixel as f64;
-                    color
-                })
+                        Self::ray_color(self.max_depth, &ray, world)
+                    })
+                    .reduce(Color::default, |a, b| a + b);
+
+                color / self.samples_per_pixel as f64
             })
-            .collect();
+        })
+        .collect();
 
         for color in colors {
             writeln!(&mut file, "{}", color.to_bytes_string()).unwrap();

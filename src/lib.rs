@@ -4,4 +4,4 @@ pub mod hittable;
 pub mod geometries;
 pub mod interval;
 pub mod camera;
-pub mod material;
+pub mod materials;

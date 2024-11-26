@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::hittable::{HitRecord, Hittable};
 
 use crate::interval::Interval;
-use crate::material::Material;
+use crate::materials::Material;
 use crate::ray::Ray;
 use crate::vec::Vec3;
 

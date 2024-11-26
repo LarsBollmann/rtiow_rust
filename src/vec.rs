@@ -7,7 +7,7 @@ use crate::interval::Interval;
 
 pub type Color = Vec3;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Vec3 {
     pub x: f64,
     pub y: f64,
@@ -282,5 +282,42 @@ impl std::fmt::Display for Vec3 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{} {} {}", self.x, self.y, self.z)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vec3() {
+        let v1 = Vec3::new(1.0, 2.0, 3.0);
+        let v2 = Vec3::new(4.0, 5.0, 6.0);
+
+        assert_eq!(v1 + v2, Vec3::new(5.0, 7.0, 9.0));
+        assert_eq!(v1 - v2, Vec3::new(-3.0, -3.0, -3.0));
+        assert_eq!(v1 * v2, Vec3::new(4.0, 10.0, 18.0));
+        assert_eq!(v1 / v2, Vec3::new(0.25, 0.4, 0.5));
+        assert_eq!(v1 + 1.0, Vec3::new(2.0, 3.0, 4.0));
+        assert_eq!(v1 - 1.0, Vec3::new(0.0, 1.0, 2.0));
+        assert_eq!(v1 * 2.0, Vec3::new(2.0, 4.0, 6.0));
+        assert_eq!(v1 / 2.0, Vec3::new(0.5, 1.0, 1.5));
+        assert_eq!(-v1, Vec3::new(-1.0, -2.0, -3.0));
+    }
+
+    #[test]
+    fn test_cross_product() {
+        let v1 = Vec3::new(1.0, 0.0, 0.0);
+        let v2 = Vec3::new(0.0, 1.0, 0.0);
+
+        assert_eq!(v1.cross(v2), Vec3::new(0.0, 0.0, 1.0));
+    }
+
+    #[test]
+    fn test_dot_product() {
+        let v1 = Vec3::new(1.0, 2.0, 3.0);
+        let v2 = Vec3::new(4.0, 5.0, 6.0);
+
+        assert_eq!(v1.dot(v2), 32.0);
     }
 }
