@@ -1,5 +1,5 @@
-mod sphere;
 mod plane;
+mod sphere;
 
-pub use sphere::Sphere;
 pub use plane::Plane;
+pub use sphere::Sphere;

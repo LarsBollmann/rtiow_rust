@@ -1,6 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Interval<T=f64>
- {
+pub struct Interval<T = f64> {
     pub min: T,
     pub max: T,
 }

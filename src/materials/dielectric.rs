@@ -1,9 +1,8 @@
-use std::fmt::Debug;
-use rand::Rng;
 use crate::{hittable::HitRecord, ray::Ray, vec::Vec3};
+use rand::Rng;
+use std::fmt::Debug;
 
 use super::Material;
-
 
 #[derive(Debug)]
 pub struct Dielectric {

@@ -9,7 +9,10 @@ use rand::Rng;
 use rayon::prelude::*;
 
 use crate::{
-    hittable::HittableList, interval::Interval, ray::Ray, vec::{Color, Vec3}
+    hittable::HittableList,
+    interval::Interval,
+    ray::Ray,
+    vec::{Color, Vec3},
 };
 
 #[derive(Debug, Clone)]
@@ -23,7 +26,9 @@ pub struct CameraArgs {
     pub fov: f64,
     pub lookfrom: Vec3,
     pub lookat: Vec3,
-    pub up: Vec3
+    pub up: Vec3,
+    pub defocus_angle: f64,
+    pub focus_distance: f64,
 }
 
 impl default::Default for CameraArgs {
@@ -38,7 +43,9 @@ impl default::Default for CameraArgs {
             fov: 120.0,
             lookfrom: Vec3::default(),
             lookat: Vec3::new(0.0, 0.0, -1.0),
-            up: Vec3::new(0.0, 1.0, 0.0)
+            up: Vec3::new(0.0, 1.0, 0.0),
+            defocus_angle: 0.0,
+            focus_distance: 1.0,
         }
     }
 }
@@ -50,6 +57,9 @@ pub struct Camera {
     pixel_00_location: Vec3,
     pixel_delta_u: Vec3,
     pixel_delta_v: Vec3,
+    defocus_disk_u: Vec3,
+    defocus_disk_v: Vec3,
+    defocus_angle: f64,
     samples_per_pixel: u32,
     max_depth: u32,
 }
@@ -58,10 +68,9 @@ impl Camera {
     pub fn new(args: CameraArgs) -> Self {
         let image_height = ((args.image_width as f64 / args.aspect_ratio) as i32).max(1);
 
-        let focal_length = (args.lookfrom-args.lookat).length();
         let theta = args.fov.to_radians();
         let h = (theta / 2.0).tan();
-        let viewport_height = 2.0 * h * focal_length;
+        let viewport_height = 2.0 * h * args.focus_distance;
         let viewport_width = viewport_height * (args.image_width as f64 / image_height as f64);
 
         let camera_origin = args.lookfrom;
@@ -76,8 +85,13 @@ impl Camera {
         let pixel_delta_u = viewport_u / args.image_width as f64;
         let pixel_delta_v = viewport_v / image_height as f64;
 
+        let defocus_disk_radius =
+            (args.defocus_angle / 2.0).to_radians().tan() * args.focus_distance;
+        let defocus_disk_u = defocus_disk_radius * u;
+        let defocus_disk_v = defocus_disk_radius * v;
+
         let viewport_upper_left =
-            camera_origin - focal_length * w - 0.5 * viewport_u - 0.5 * viewport_v;
+            camera_origin - args.focus_distance * w - 0.5 * viewport_u - 0.5 * viewport_v;
 
         let pixel_00_location = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
@@ -90,6 +104,9 @@ impl Camera {
             pixel_00_location,
             pixel_delta_u,
             pixel_delta_v,
+            defocus_disk_u,
+            defocus_disk_v,
+            defocus_angle: args.defocus_angle,
         }
     }
 
@@ -119,7 +136,12 @@ impl Camera {
             + self.pixel_delta_v * (row as f64 + rand_v)
             + self.pixel_delta_u * (column as f64 + rand_u);
 
-        let origin = self.origin;
+        let origin = if self.defocus_angle > 0.0 {
+            let random = Vec3::random_in_unit_circle();
+            self.origin + random.x * self.defocus_disk_u + random.y * self.defocus_disk_v
+        } else {
+            self.origin
+        };
         let direction = pixel_sample - origin;
 
         Ray {
@@ -154,23 +176,23 @@ impl Camera {
 
         // Parallel implementation using rayon
 
-        let colors: Vec<Color> =     (0..self.image_height)
-        .into_par_iter()
-        .progress()
-        .flat_map(|row| {
-            (0..self.image_width).into_par_iter().map(move |column| {
-                let color: Color = (0..self.samples_per_pixel)
-                    .into_par_iter()
-                    .map(|_| {
-                        let ray = self.get_ray(row, column);
-                        Self::ray_color(self.max_depth, &ray, world)
-                    })
-                    .reduce(Color::default, |a, b| a + b);
+        let colors: Vec<Color> = (0..self.image_height)
+            .into_par_iter()
+            .progress()
+            .flat_map(|row| {
+                (0..self.image_width).into_par_iter().map(move |column| {
+                    let color: Color = (0..self.samples_per_pixel)
+                        .into_par_iter()
+                        .map(|_| {
+                            let ray = self.get_ray(row, column);
+                            Self::ray_color(self.max_depth, &ray, world)
+                        })
+                        .reduce(Color::default, |a, b| a + b);
 
-                color / self.samples_per_pixel as f64
+                    color / self.samples_per_pixel as f64
+                })
             })
-        })
-        .collect();
+            .collect();
 
         for color in colors {
             writeln!(&mut file, "{}", color.to_bytes_string()).unwrap();

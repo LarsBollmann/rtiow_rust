@@ -7,7 +7,6 @@ use crate::materials::Material;
 use crate::ray::Ray;
 use crate::vec::Vec3;
 
-
 #[derive(Debug, Clone)]
 pub struct Plane {
     origin: Vec3,
@@ -20,7 +19,7 @@ impl Plane {
         Self {
             origin,
             normal: normal.unit_vector(),
-            material
+            material,
         }
     }
 }
@@ -38,6 +37,12 @@ impl Hittable for Plane {
         }
 
         let p = ray.at(t);
-        Some(HitRecord::new(p, self.normal, t, ray, self.material.clone()))
+        Some(HitRecord::new(
+            p,
+            self.normal,
+            t,
+            ray,
+            self.material.clone(),
+        ))
     }
 }

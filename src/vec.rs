@@ -1,4 +1,3 @@
-
 use std::ops::Range;
 
 use rand::Rng;
@@ -63,7 +62,7 @@ impl Vec3 {
         }
     }
 
-    pub fn random_unit_vector() -> Self {
+    pub fn random_in_unit_sphere() -> Self {
         loop {
             let vec = Self::random_range(-1.0..1.0);
             let length = vec.length_squared();
@@ -73,11 +72,22 @@ impl Vec3 {
         }
     }
 
+    pub fn random_in_unit_circle() -> Self {
+        loop {
+            let mut vec = Self::random_range(-1.0..1.0);
+            vec.z = 0.0;
+            let length = vec.length_squared();
+            if length < 1.0 && length > 1e-160 {
+                return vec / length.sqrt();
+            }
+        }
+    }
+
     pub fn random_on_hemisphere(normal: Vec3) -> Vec3 {
-        let vec = Self::random_unit_vector();
+        let vec = Self::random_in_unit_sphere();
         match vec.dot(normal) > 0.0 {
             true => vec,
-            false => -vec
+            false => -vec,
         }
     }
 
@@ -90,13 +100,6 @@ impl Vec3 {
         self - 2.0 * self.dot(normal) * normal
     }
 
-    // inline vec3 refract(const vec3& uv, const vec3& n, double etai_over_etat) {
-    //     auto cos_theta = std::fmin(dot(-uv, n), 1.0);
-    //     vec3 r_out_perp =  etai_over_etat * (uv + cos_theta*n);
-    //     vec3 r_out_parallel = -std::sqrt(std::fabs(1.0 - r_out_perp.length_squared())) * n;
-    //     return r_out_perp + r_out_parallel;
-    // }
-    
     pub fn refract(self, normal: Vec3, etai_over_etat: f64) -> Vec3 {
         let cos_theta = (-self).dot(normal).min(1.0);
         let r_out_perp = etai_over_etat * (self + cos_theta * normal);
